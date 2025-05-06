@@ -56,6 +56,7 @@
         <div class="bg-white text-gray-800 p-6 rounded-xl shadow-2xl mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-4">График метрик</h2>
             <canvas id="metricsChart"></canvas>
+            <button onclick="clearStats()" class="mt-4 bg-red-500 text-white p-2 rounded hover:bg-red-600">Очистить статистику</button>
         </div>
 
         <!-- Статус API -->
@@ -92,14 +93,14 @@
 
     <script>
         // Хранилище для данных графика
-        const chartData = {
+        let chartData = {
             labels: [],
             heapObjects: [],
             requestsTotal: []
         };
 
         // Хранилище для статистики API
-        const apiStats = {
+        let apiStats = {
             successCount: 0,
             errorCount: 0,
             lastResponseTime: 0,
@@ -172,17 +173,23 @@
                 if (response.data.error) {
                     throw new Error(response.data.error);
                 }
-                const metrics = response.data;
+                const { metrics, chartData: serverChartData, apiStats: serverApiStats } = response.data;
                 const responseTime = Math.round(performance.now() - startTime);
 
-                apiStats.successCount += 1;
+                // Обновляем локальные данные
+                chartData = serverChartData || chartData;
+                apiStats.successCount = serverApiStats.successCount + 1;
+                apiStats.errorCount = serverApiStats.errorCount;
                 apiStats.lastResponseTime = responseTime;
                 apiStats.lastStatus = 'Успех';
-                
+
                 displayMetrics(metrics);
                 updateChart(metrics);
                 updateApiStats();
-                
+
+                // Сохраняем статистику на сервере
+                await saveStats();
+
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('metricsTable').classList.remove('hidden');
                 document.getElementById('error').classList.add('hidden');
@@ -190,13 +197,42 @@
                 console.error('Error fetching metrics:', error);
                 apiStats.errorCount += 1;
                 apiStats.lastStatus = 'Ошибка';
-                
+
                 displayMetrics({});
                 updateApiStats();
-                
+                await saveStats();
+
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('error').classList.remove('hidden');
                 document.getElementById('error').textContent = `Ошибка: ${error.message}`;
+            }
+        }
+
+        async function saveStats() {
+            try {
+                await axios.post('/metrics', { chartData, apiStats });
+                console.log('Statistics saved to server');
+            } catch (error) {
+                console.error('Error saving statistics to server:', error);
+            }
+        }
+
+        async function clearStats() {
+            try {
+                await axios.post('/metrics/clear');
+                chartData = { labels: [], heapObjects: [], requestsTotal: [] };
+                apiStats = { successCount: 0, errorCount: 0, lastResponseTime: 0, lastStatus: 'Ожидание' };
+                if (metricsChart) {
+                    metricsChart.data.labels = [];
+                    metricsChart.data.datasets[0].data = [];
+                    metricsChart.data.datasets[1].data = [];
+                    metricsChart.update();
+                }
+                displayMetrics({});
+                updateApiStats();
+                console.log('Statistics cleared');
+            } catch (error) {
+                console.error('Error clearing statistics:', error);
             }
         }
 
@@ -241,7 +277,7 @@
             chartData.heapObjects.push(metrics.heap_objects || 0);
             chartData.requestsTotal.push(metrics.requests_total || 0);
 
-            if (chartData.labels.length > 10) {
+            if (chartData.labels.length > 100) {
                 chartData.labels.shift();
                 chartData.heapObjects.shift();
                 chartData.requestsTotal.shift();
@@ -265,8 +301,15 @@
             document.getElementById('api_status').textContent = apiStats.lastStatus;
         }
 
+        // Инициализация: загрузка данных и первый запрос
         fetchMetrics();
-        setInterval(fetchMetrics, 30000); // Обновление каждые 30 секунд
+        setInterval(fetchMetrics, 30000);
+        if (metricsChart && chartData.labels.length > 0) {
+            metricsChart.data.labels = chartData.labels;
+            metricsChart.data.datasets[0].data = chartData.heapObjects;
+            metricsChart.data.datasets[1].data = chartData.requestsTotal;
+            metricsChart.update();
+        }
     </script>
 </body>
 </html>
