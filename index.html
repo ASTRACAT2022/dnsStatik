@@ -23,7 +23,7 @@
         <div id="metrics" class="bg-white text-gray-800 p-6 rounded-xl shadow-2xl mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-4">Основные показатели</h2>
             <div id="loading" class="text-center text-gray-500">Загрузка данных...</div>
-            <div id="error" class="text-red-500 hidden">Ошибка загрузки данных. Пожалуйста, попробуйте позже.</div>
+            <div id="error" class="text-red-500 hidden"></div>
             <table class="w-full border-collapse hidden" id="metricsTable">
                 <thead>
                     <tr class="bg-gray-100">
@@ -180,12 +180,27 @@
             console.log('Chart initialized successfully');
         } catch (error) {
             console.error('Error initializing chart:', error);
+            showError('Ошибка инициализации графика');
+        }
+
+        // Функция для повторных попыток запроса
+        async function fetchWithRetry(url, retries = 3, delay = 1000) {
+            for (let i = 0; i < retries; i++) {
+                try {
+                    const response = await axios.get(url, { timeout: 5000 });
+                    return response;
+                } catch (error) {
+                    if (i === retries - 1) throw error;
+                    console.warn(`Retry ${i + 1}/${retries} failed: ${error.message}. Retrying in ${delay}ms...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
         }
 
         async function fetchMetrics() {
             const startTime = performance.now();
             try {
-                const response = await axios.get('/metrics');
+                const response = await fetchWithRetry('/metrics');
                 if (response.data.error) {
                     throw new Error(response.data.error);
                 }
@@ -233,13 +248,13 @@
 
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('error').classList.remove('hidden');
-                document.getElementById('error').textContent = `Ошибка: ${error.message}`;
+                document.getElementById('error').textContent = `Ошибка: ${error.message || 'Не удалось загрузить данные'}`;
             }
         }
 
         async function saveStats() {
             try {
-                await axios.post('/metrics', { chartData, apiStats });
+                await axios.post('/metrics', { chartData, apiStats }, { timeout: 5000 });
                 console.log('Statistics saved to server');
             } catch (error) {
                 console.error('Error saving statistics to server:', error);
@@ -248,7 +263,7 @@
 
         async function clearStats() {
             try {
-                await axios.post('/metrics/clear');
+                await axios.post('/metrics/clear', {}, { timeout: 5000 });
                 chartData = { labels: [], heapObjects: [], requestsTotal: [] };
                 apiStats = { successCount: 0, errorCount: 0, lastResponseTime: 0, lastStatus: 'Ожидание', requests: [] };
                 if (metricsChart) {
@@ -260,9 +275,12 @@
                 displayMetrics({});
                 updateApiStats();
                 document.getElementById('apiHistory').classList.add('hidden');
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('error').classList.add('hidden');
                 console.log('Statistics cleared');
             } catch (error) {
                 console.error('Error clearing statistics:', error);
+                showError('Ошибка при очистке статистики');
             }
         }
 
@@ -336,6 +354,7 @@
                 console.log('Chart updated successfully');
             } else {
                 console.error('Chart instance not available');
+                showError('Ошибка обновления графика');
             }
         }
 
@@ -344,6 +363,12 @@
             document.getElementById('api_error_count').textContent = apiStats.errorCount;
             document.getElementById('api_response_time').textContent = apiStats.lastResponseTime;
             document.getElementById('api_status').textContent = apiStats.lastStatus;
+        }
+
+        function showError(message) {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('error').classList.remove('hidden');
+            document.getElementById('error').textContent = message;
         }
 
         // Инициализация: загрузка данных и первый запрос
