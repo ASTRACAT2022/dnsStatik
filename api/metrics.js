@@ -10,7 +10,7 @@ module.exports = async (req, res) => {
     const responseTimeMs = Date.now() - startTime;
     
     const metrics = parsePrometheusMetrics(response.data);
-    metrics.response_time_ms = responseTimeMs; // Добавляем время ответа
+    metrics.response_time_ms = responseTimeMs;
     
     console.log('Metrics parsed successfully');
     res.status(200).json(metrics);
@@ -32,6 +32,10 @@ function parsePrometheusMetrics(data) {
         metrics.heap_objects = parseFloat(line.split(' ')[1]);
       } else if (line.startsWith('promhttp_metric_handler_requests_total{code="200"}')) {
         metrics.requests_total = parseFloat(line.split(' ')[1]);
+      } else if (line.startsWith('process_start_time_seconds')) {
+        const startTimeSeconds = parseFloat(line.split(' ')[1]);
+        const currentTimeSeconds = Date.now() / 1000;
+        metrics.uptime = Math.max(0, currentTimeSeconds - startTimeSeconds);
       }
     } catch (error) {
       console.error(`Error parsing line: ${line}. Error: ${error.message}`);
