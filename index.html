@@ -60,7 +60,7 @@
         </div>
 
         <!-- Статус API -->
-        <div class="bg-white text-gray-800 p-6 rounded-xl shadow-2xl fade-in">
+        <div class="bg-white text-gray-800 p-6 rounded-xl shadow-2xl mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-4">Статус API</h2>
             <table class="w-full border-collapse">
                 <thead>
@@ -88,6 +88,21 @@
                     </tr>
                 </tbody>
             </table>
+            <p class="text-sm text-gray-600 mt-2">История запросов хранится за последние 24 часа</p>
+            <button onclick="showApiHistory()" class="mt-4 bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Показать историю запросов</button>
+            <div id="apiHistory" class="hidden mt-4 max-h-64 overflow-y-auto">
+                <h3 class="text-lg font-semibold mb-2">История запросов за 24 часа</h3>
+                <table class="w-full border-collapse">
+                    <thead>
+                        <tr class="bg-gray-200">
+                            <th class="border border-gray-300 p-2">Время</th>
+                            <th class="border border-gray-300 p-2">Статус</th>
+                            <th class="border border-gray-300 p-2">Время ответа (мс)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="apiHistoryTable"></tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -104,7 +119,8 @@
             successCount: 0,
             errorCount: 0,
             lastResponseTime: 0,
-            lastStatus: 'Ожидание'
+            lastStatus: 'Ожидание',
+            requests: []
         };
 
         // Инициализация графика
@@ -178,10 +194,17 @@
 
                 // Обновляем локальные данные
                 chartData = serverChartData || chartData;
-                apiStats.successCount = serverApiStats.successCount + 1;
+                apiStats.successCount = serverApiStats.successCount;
                 apiStats.errorCount = serverApiStats.errorCount;
                 apiStats.lastResponseTime = responseTime;
                 apiStats.lastStatus = 'Успех';
+                apiStats.requests = serverApiStats.requests;
+                apiStats.requests.push({
+                    timestamp: new Date().toISOString(),
+                    success: true,
+                    responseTime,
+                    status: 'Успех'
+                });
 
                 displayMetrics(metrics);
                 updateChart(metrics);
@@ -197,6 +220,12 @@
                 console.error('Error fetching metrics:', error);
                 apiStats.errorCount += 1;
                 apiStats.lastStatus = 'Ошибка';
+                apiStats.requests.push({
+                    timestamp: new Date().toISOString(),
+                    success: false,
+                    responseTime: 0,
+                    status: 'Ошибка'
+                });
 
                 displayMetrics({});
                 updateApiStats();
@@ -221,7 +250,7 @@
             try {
                 await axios.post('/metrics/clear');
                 chartData = { labels: [], heapObjects: [], requestsTotal: [] };
-                apiStats = { successCount: 0, errorCount: 0, lastResponseTime: 0, lastStatus: 'Ожидание' };
+                apiStats = { successCount: 0, errorCount: 0, lastResponseTime: 0, lastStatus: 'Ожидание', requests: [] };
                 if (metricsChart) {
                     metricsChart.data.labels = [];
                     metricsChart.data.datasets[0].data = [];
@@ -230,10 +259,26 @@
                 }
                 displayMetrics({});
                 updateApiStats();
+                document.getElementById('apiHistory').classList.add('hidden');
                 console.log('Statistics cleared');
             } catch (error) {
                 console.error('Error clearing statistics:', error);
             }
+        }
+
+        function showApiHistory() {
+            const historyTable = document.getElementById('apiHistoryTable');
+            historyTable.innerHTML = '';
+            apiStats.requests.forEach(req => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="border border-gray-300 p-2">${new Date(req.timestamp).toLocaleString()}</td>
+                    <td class="border border-gray-300 p-2 ${req.success ? 'text-green-600' : 'text-red-600'}">${req.status}</td>
+                    <td class="border border-gray-300 p-2">${req.responseTime}</td>
+                `;
+                historyTable.appendChild(row);
+            });
+            document.getElementById('apiHistory').classList.toggle('hidden');
         }
 
         function displayMetrics(metrics) {
