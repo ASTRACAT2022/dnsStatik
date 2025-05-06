@@ -4,65 +4,85 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>astracatCloud DNS IPV4</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
 </head>
-<body class="bg-gray-100 font-sans">
-    <div class="container mx-auto p-6">
-        <h1 class="text-3xl font-bold text-center mb-6">astracatCloud DNS IPV4</h1>
-        <div id="metrics" class="bg-white p-6 rounded-lg shadow-lg mb-6">
-            <h2 class="text-xl font-semibold mb-4">Основные показатели</h2>
-            <div id="loading" class="text-center">Загрузка данных...</div>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <div class="container mx-auto p-6 max-w-4xl">
+        <h1 class="text-4xl font-bold text-center mb-8 text-blue-300">astracatCloud DNS IPV4</h1>
+        
+        <!-- Метрики -->
+        <div id="metrics" class="bg-white text-gray-800 p-6 rounded-xl shadow-2xl mb-6 fade-in">
+            <h2 class="text-2xl font-semibold mb-4">Основные показатели</h2>
+            <div id="loading" class="text-center text-gray-500">Загрузка данных...</div>
             <div id="error" class="text-red-500 hidden">Ошибка загрузки данных. Пожалуйста, попробуйте позже.</div>
             <table class="w-full border-collapse hidden" id="metricsTable">
                 <thead>
-                    <tr class="bg-gray-200">
-                        <th class="border p-2">Параметр</th>
-                        <th class="border p-2">Значение</th>
+                    <tr class="bg-gray-100">
+                        <th class="border border-gray-300 p-3">Параметр</th>
+                        <th class="border border-gray-300 p-3">Значение</th>
+                        <th class="border border-gray-300 p-3">Нагрузка</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td class="border p-2">Количество объектов в куче</td>
-                        <td class="border p-2" id="heap_objects"></td>
+                        <td class="border border-gray-300 p-3">Количество объектов в куче</td>
+                        <td class="border border-gray-300 p-3" id="heap_objects"></td>
+                        <td class="border border-gray-300 p-3" id="heap_objects_load"></td>
                     </tr>
                     <tr>
-                        <td class="border p-2">Успешные запросы (код 200)</td>
-                        <td class="border p-2" id="requests_total"></td>
+                        <td class="border border-gray-300 p-3">Успешные запросы (код 200)</td>
+                        <td class="border border-gray-300 p-3" id="requests_total"></td>
+                        <td class="border border-gray-300 p-3"></td>
+                    </tr>
+                    <tr>
+                        <td class="border border-gray-300 p-3">Время работы сервера</td>
+                        <td class="border border-gray-300 p-3" id="uptime"></td>
+                        <td class="border border-gray-300 p-3"></td>
                     </tr>
                 </tbody>
             </table>
         </div>
-        <div class="bg-white p-6 rounded-lg shadow-lg mb-6">
-            <h2 class="text-xl font-semibold mb-4">График метрик</h2>
+
+        <!-- График -->
+        <div class="bg-white text-gray-800 p-6 rounded-xl shadow-2xl mb-6 fade-in">
+            <h2 class="text-2xl font-semibold mb-4">График метрик</h2>
             <canvas id="metricsChart" width="400" height="200"></canvas>
         </div>
-        <div class="bg-white p-6 rounded-lg shadow-lg">
-            <h2 class="text-xl font-semibold mb-4">Статус API</h2>
+
+        <!-- Статус API -->
+        <div class="bg-white text-gray-800 p-6 rounded-xl shadow-2xl fade-in">
+            <h2 class="text-2xl font-semibold mb-4">Статус API</h2>
             <table class="w-full border-collapse">
                 <thead>
-                    <tr class="bg-gray-200">
-                        <th class="border p-2">Параметр</th>
-                        <th class="border p-2">Значение</th>
+                    <tr class="bg-gray-100">
+                        <th class="border border-gray-300 p-3">Параметр</th>
+                        <th class="border border-gray-300 p-3">Значение</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td class="border p-2">Успешные запросы</td>
-                        <td class="border p-2" id="api_success_count">0</td>
+                        <td class="border border-gray-300 p-3">Успешные запросы</td>
+                        <td class="border border-gray-300 p-3" id="api_success_count">0</td>
                     </tr>
                     <tr>
-                        <td class="border p-2">Ошибки</td>
-                        <td class="border p-2" id="api_error_count">0</td>
+                        <td class="border border-gray-300 p-3">Ошибки</td>
+                        <td class="border border-gray-300 p-3" id="api_error_count">0</td>
                     </tr>
                     <tr>
-                        <td class="border p-2">Время последнего ответа (мс)</td>
-                        <td class="border p-2" id="api_response_time">0</td>
+                        <td class="border border-gray-300 p-3">Время последнего ответа (мс)</td>
+                        <td class="border border-gray-300 p-3" id="api_response_time">0</td>
                     </tr>
                     <tr>
-                        <td class="border p-2">Статус последнего запроса</td>
-                        <td class="border p-2" id="api_status">Ожидание</td>
+                        <td class="border border-gray-300 p-3">Статус последнего запроса</td>
+                        <td class="border border-gray-300 p-3" id="api_status">Ожидание</td>
                     </tr>
                 </tbody>
             </table>
@@ -95,18 +115,18 @@
                     {
                         label: 'Объекты в куче',
                         data: chartData.heapObjects,
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        borderColor: '#4B9CFC',
+                        backgroundColor: 'rgba(75, 156, 252, 0.2)',
                         fill: false,
-                        tension: 0.1
+                        tension: 0.2
                     },
                     {
                         label: 'Успешные запросы (код 200)',
                         data: chartData.requestsTotal,
-                        borderColor: 'rgba(255, 99, 132, 1)',
-                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        borderColor: '#FC8181',
+                        backgroundColor: 'rgba(252, 129, 129, 0.2)',
                         fill: false,
-                        tension: 0.1
+                        tension: 0.2
                     }
                 ]
             },
@@ -114,15 +134,17 @@
                 responsive: true,
                 scales: {
                     x: {
-                        title: { display: true, text: 'Время' }
+                        title: { display: true, text: 'Время', color: '#4B5563' },
+                        grid: { color: '#E5E7EB' }
                     },
                     y: {
-                        title: { display: true, text: 'Значение' },
-                        beginAtZero: false
+                        title: { display: true, text: 'Значение', color: '#4B5563' },
+                        beginAtZero: false,
+                        grid: { color: '#E5E7EB' }
                     }
                 },
                 plugins: {
-                    legend: { display: true }
+                    legend: { labels: { color: '#4B5563' } }
                 }
             }
         });
@@ -137,7 +159,6 @@
                 const metrics = response.data;
                 const responseTime = Math.round(performance.now() - startTime);
 
-                // Обновляем статистику API
                 apiStats.successCount += 1;
                 apiStats.lastResponseTime = responseTime;
                 apiStats.lastStatus = 'Успех';
@@ -148,10 +169,14 @@
                 
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('metricsTable').classList.remove('hidden');
+                document.getElementById('error').classList.add('hidden');
             } catch (error) {
                 console.error('Error fetching metrics:', error);
                 apiStats.errorCount += 1;
                 apiStats.lastStatus = 'Ошибка';
+                
+                // Очищаем метрики при ошибке
+                displayMetrics({}); // Пустой объект для "Нет данных"
                 updateApiStats();
                 
                 document.getElementById('loading').classList.add('hidden');
@@ -161,8 +186,39 @@
         }
 
         function displayMetrics(metrics) {
-            document.getElementById('heap_objects').textContent = metrics.heap_objects ? Math.round(metrics.heap_objects).toLocaleString() : '0';
-            document.getElementById('requests_total').textContent = metrics.requests_total ? Math.round(metrics.requests_total).toLocaleString() : '0';
+            // Метрики
+            document.getElementById('heap_objects').textContent = metrics.heap_objects ? Math.round(metrics.heap_objects).toLocaleString() : 'Нет данных';
+            document.getElementById('requests_total').textContent = metrics.requests_total ? Math.round(metrics.requests_total).toLocaleString() : 'Нет данных';
+            document.getElementById('uptime').textContent = metrics.uptime ? formatUptime(metrics.uptime) : 'Нет данных';
+
+            // Индикатор нагрузки
+            const heapObjects = metrics.heap_objects || 0;
+            const loadElement = document.getElementById('heap_objects_load');
+            let loadText, loadClass;
+            if (!metrics.heap_objects) {
+                loadText = 'Нет данных';
+                loadClass = 'bg-gray-500 text-white';
+            } else if (heapObjects < 200000) {
+                loadText = 'Низкая';
+                loadClass = 'bg-green-500 text-white';
+            } else if (heapObjects < 500000) {
+                loadText = 'Средняя';
+                loadClass = 'bg-yellow-500 text-black';
+            } else {
+                loadText = 'Высокая';
+                loadClass = 'bg-red-500 text-white';
+            }
+            loadElement.textContent = loadText;
+            loadElement.className = `border border-gray-300 p-3 ${loadClass} text-center`;
+        }
+
+        function formatUptime(seconds) {
+            const days = Math.floor(seconds / (24 * 3600));
+            seconds %= 24 * 3600;
+            const hours = Math.floor(seconds / 3600);
+            seconds %= 3600;
+            const minutes = Math.floor(seconds / 60);
+            return `${days} дн, ${hours} ч, ${minutes} мин`;
         }
 
         function updateChart(metrics) {
@@ -190,7 +246,6 @@
             document.getElementById('api_status').textContent = apiStats.lastStatus;
         }
 
-        // Начальная загрузка и автообновление каждую минуту
         fetchMetrics();
         setInterval(fetchMetrics, 60000);
     </script>
