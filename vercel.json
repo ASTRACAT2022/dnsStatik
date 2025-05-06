@@ -12,12 +12,7 @@
   "routes": [
     {
       "src": "/metrics",
-      "methods": ["GET", "POST"],
-      "dest": "api/metrics.js"
-    },
-    {
-      "src": "/metrics/clear",
-      "methods": ["POST"],
+      "methods": ["GET"],
       "dest": "api/metrics.js"
     },
     {
