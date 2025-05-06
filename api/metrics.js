@@ -5,8 +5,13 @@ module.exports = async (req, res) => {
   
   try {
     console.log(`Fetching metrics from http://85.209.2.112:9000/metrics`);
+    const startTime = Date.now();
     const response = await axios.get('http://85.209.2.112:9000/metrics', { timeout: 5000 });
+    const responseTimeMs = Date.now() - startTime;
+    
     const metrics = parsePrometheusMetrics(response.data);
+    metrics.response_time_ms = responseTimeMs; // Добавляем время ответа
+    
     console.log('Metrics parsed successfully');
     res.status(200).json(metrics);
   } catch (error) {
