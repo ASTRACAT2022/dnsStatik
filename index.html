@@ -88,39 +88,23 @@
                     </tr>
                 </tbody>
             </table>
-            <p class="text-sm text-gray-600 mt-2">История запросов хранится за последние 24 часа</p>
-            <button onclick="showApiHistory()" class="mt-4 bg-blue-500 text-white p-2 rounded hover:bg-blue-600">Показать историю запросов</button>
-            <div id="apiHistory" class="hidden mt-4 max-h-64 overflow-y-auto">
-                <h3 class="text-lg font-semibold mb-2">История запросов за 24 часа</h3>
-                <table class="w-full border-collapse">
-                    <thead>
-                        <tr class="bg-gray-200">
-                            <th class="border border-gray-300 p-2">Время</th>
-                            <th class="border border-gray-300 p-2">Статус</th>
-                            <th class="border border-gray-300 p-2">Время ответа (мс)</th>
-                        </tr>
-                    </thead>
-                    <tbody id="apiHistoryTable"></tbody>
-                </table>
-            </div>
         </div>
     </div>
 
     <script>
         // Хранилище для данных графика
-        let chartData = {
+        let chartData = JSON.parse(localStorage.getItem('chartData')) || {
             labels: [],
             heapObjects: [],
             requestsTotal: []
         };
 
         // Хранилище для статистики API
-        let apiStats = {
+        let apiStats = JSON.parse(localStorage.getItem('apiStats')) || {
             successCount: 0,
             errorCount: 0,
             lastResponseTime: 0,
-            lastStatus: 'Ожидание',
-            requests: []
+            lastStatus: 'Ожидание'
         };
 
         // Инициализация графика
@@ -183,50 +167,27 @@
             showError('Ошибка инициализации графика');
         }
 
-        // Функция для повторных попыток запроса
-        async function fetchWithRetry(url, retries = 3, delay = 1000) {
-            for (let i = 0; i < retries; i++) {
-                try {
-                    const response = await axios.get(url, { timeout: 5000 });
-                    return response;
-                } catch (error) {
-                    if (i === retries - 1) throw error;
-                    console.warn(`Retry ${i + 1}/${retries} failed: ${error.message}. Retrying in ${delay}ms...`);
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
-            }
-        }
-
         async function fetchMetrics() {
             const startTime = performance.now();
             try {
-                const response = await fetchWithRetry('/metrics');
+                const response = await axios.get('/metrics', { timeout: 5000 });
                 if (response.data.error) {
                     throw new Error(response.data.error);
                 }
-                const { metrics, chartData: serverChartData, apiStats: serverApiStats } = response.data;
+                const metrics = response.data.metrics;
                 const responseTime = Math.round(performance.now() - startTime);
 
-                // Обновляем локальные данные
-                chartData = serverChartData || chartData;
-                apiStats.successCount = serverApiStats.successCount;
-                apiStats.errorCount = serverApiStats.errorCount;
+                apiStats.successCount += 1;
                 apiStats.lastResponseTime = responseTime;
                 apiStats.lastStatus = 'Успех';
-                apiStats.requests = serverApiStats.requests;
-                apiStats.requests.push({
-                    timestamp: new Date().toISOString(),
-                    success: true,
-                    responseTime,
-                    status: 'Успех'
-                });
 
                 displayMetrics(metrics);
                 updateChart(metrics);
                 updateApiStats();
 
-                // Сохраняем статистику на сервере
-                await saveStats();
+                // Сохраняем в localStorage
+                localStorage.setItem('chartData', JSON.stringify(chartData));
+                localStorage.setItem('apiStats', JSON.stringify(apiStats));
 
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('metricsTable').classList.remove('hidden');
@@ -235,16 +196,10 @@
                 console.error('Error fetching metrics:', error);
                 apiStats.errorCount += 1;
                 apiStats.lastStatus = 'Ошибка';
-                apiStats.requests.push({
-                    timestamp: new Date().toISOString(),
-                    success: false,
-                    responseTime: 0,
-                    status: 'Ошибка'
-                });
 
                 displayMetrics({});
                 updateApiStats();
-                await saveStats();
+                localStorage.setItem('apiStats', JSON.stringify(apiStats));
 
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('error').classList.remove('hidden');
@@ -252,51 +207,22 @@
             }
         }
 
-        async function saveStats() {
-            try {
-                await axios.post('/metrics', { chartData, apiStats }, { timeout: 5000 });
-                console.log('Statistics saved to server');
-            } catch (error) {
-                console.error('Error saving statistics to server:', error);
+        function clearStats() {
+            chartData = { labels: [], heapObjects: [], requestsTotal: [] };
+            apiStats = { successCount: 0, errorCount: 0, lastResponseTime: 0, lastStatus: 'Ожидание' };
+            localStorage.setItem('chartData', JSON.stringify(chartData));
+            localStorage.setItem('apiStats', JSON.stringify(apiStats));
+            if (metricsChart) {
+                metricsChart.data.labels = [];
+                metricsChart.data.datasets[0].data = [];
+                metricsChart.data.datasets[1].data = [];
+                metricsChart.update();
             }
-        }
-
-        async function clearStats() {
-            try {
-                await axios.post('/metrics/clear', {}, { timeout: 5000 });
-                chartData = { labels: [], heapObjects: [], requestsTotal: [] };
-                apiStats = { successCount: 0, errorCount: 0, lastResponseTime: 0, lastStatus: 'Ожидание', requests: [] };
-                if (metricsChart) {
-                    metricsChart.data.labels = [];
-                    metricsChart.data.datasets[0].data = [];
-                    metricsChart.data.datasets[1].data = [];
-                    metricsChart.update();
-                }
-                displayMetrics({});
-                updateApiStats();
-                document.getElementById('apiHistory').classList.add('hidden');
-                document.getElementById('loading').classList.add('hidden');
-                document.getElementById('error').classList.add('hidden');
-                console.log('Statistics cleared');
-            } catch (error) {
-                console.error('Error clearing statistics:', error);
-                showError('Ошибка при очистке статистики');
-            }
-        }
-
-        function showApiHistory() {
-            const historyTable = document.getElementById('apiHistoryTable');
-            historyTable.innerHTML = '';
-            apiStats.requests.forEach(req => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
-                    <td class="border border-gray-300 p-2">${new Date(req.timestamp).toLocaleString()}</td>
-                    <td class="border border-gray-300 p-2 ${req.success ? 'text-green-600' : 'text-red-600'}">${req.status}</td>
-                    <td class="border border-gray-300 p-2">${req.responseTime}</td>
-                `;
-                historyTable.appendChild(row);
-            });
-            document.getElementById('apiHistory').classList.toggle('hidden');
+            displayMetrics({});
+            updateApiStats();
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('error').classList.add('hidden');
+            console.log('Statistics cleared');
         }
 
         function displayMetrics(metrics) {
@@ -354,7 +280,8 @@
                 console.log('Chart updated successfully');
             } else {
                 console.error('Chart instance not available');
-                showError('Ошибка обновления графика');
+                document.getElementById('error').classList.remove('hidden');
+                document.getElementById('error').textContent = 'Ошибка обновления графика';
             }
         }
 
@@ -363,12 +290,6 @@
             document.getElementById('api_error_count').textContent = apiStats.errorCount;
             document.getElementById('api_response_time').textContent = apiStats.lastResponseTime;
             document.getElementById('api_status').textContent = apiStats.lastStatus;
-        }
-
-        function showError(message) {
-            document.getElementById('loading').classList.add('hidden');
-            document.getElementById('error').classList.remove('hidden');
-            document.getElementById('error').textContent = message;
         }
 
         // Инициализация: загрузка данных и первый запрос
