@@ -1,0 +1,22 @@
+{
+  "builds": [
+    {
+      "src": "api/metrics.js",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "index.html",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/metrics",
+      "dest": "api/metrics.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "index.html"
+    }
+  ]
+}
