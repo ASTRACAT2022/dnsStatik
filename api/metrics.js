@@ -24,6 +24,20 @@ function cleanOldRequests() {
     }
 }
 
+// Функция для повторных попыток запроса к Prometheus
+async function fetchWithRetry(url, retries = 3, delay = 1000) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const response = await axios.get(url, { timeout: 5000 });
+            return response;
+        } catch (error) {
+            console.warn(`Retry ${i + 1}/${retries} failed for ${url}: ${error.message}. Retrying in ${delay}ms...`);
+            if (i === retries - 1) throw error;
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+}
+
 module.exports = async (req, res) => {
     console.log(`Received ${req.method} request for ${req.path}`);
 
@@ -31,8 +45,12 @@ module.exports = async (req, res) => {
         try {
             console.log(`Fetching metrics from http://85.209.2.112:9000/metrics`);
             const startTime = Date.now();
-            const response = await axios.get('http://85.209.2.112:9000/metrics', { timeout: 5000 });
+            const response = await fetchWithRetry('http://85.209.2.112:9000/metrics');
             const responseTimeMs = Date.now() - startTime;
+
+            if (!response.data || typeof response.data !== 'string') {
+                throw new Error('Invalid response data from Prometheus');
+            }
 
             const metrics = parsePrometheusMetrics(response.data);
             metrics.response_time_ms = responseTimeMs;
@@ -49,30 +67,29 @@ module.exports = async (req, res) => {
                 requests: statsStore.apiStats.requests
             };
 
-            console.log('Metrics parsed successfully');
+            console.log('Metrics parsed successfully:', metrics);
             res.status(200).json({
                 metrics,
                 chartData: statsStore.chartData,
                 apiStats
             });
         } catch (error) {
-            console.error(`Failed to fetch or parse metrics: ${error.message}`);
+            console.error(`Failed to fetch or parse metrics: ${error.message}`, error.stack);
             res.status(500).json({ error: `Ошибка при получении метрик: ${error.message}` });
         }
     } else if (req.method === 'POST' && req.path === '/metrics') {
         try {
             const { chartData, apiStats } = req.body;
-            if (chartData) {
-                statsStore.chartData = chartData;
+            if (!chartData || !apiStats) {
+                throw new Error('Invalid request body');
             }
-            if (apiStats && apiStats.requests) {
-                statsStore.apiStats.requests = apiStats.requests;
-                cleanOldRequests();
-            }
+            statsStore.chartData = chartData;
+            statsStore.apiStats.requests = apiStats.requests || [];
+            cleanOldRequests();
             console.log('Statistics updated in server store');
             res.status(200).json({ message: 'Statistics saved' });
         } catch (error) {
-            console.error(`Error saving statistics: ${error.message}`);
+            console.error(`Error saving statistics: ${error.message}`, error.stack);
             res.status(500).json({ error: `Ошибка при сохранении статистики: ${error.message}` });
         }
     } else if (req.method === 'POST' && req.path === '/metrics/clear') {
@@ -84,7 +101,7 @@ module.exports = async (req, res) => {
             console.log('Statistics cleared in server store');
             res.status(200).json({ message: 'Statistics cleared' });
         } catch (error) {
-            console.error(`Error clearing statistics: ${error.message}`);
+            console.error(`Error clearing statistics: ${error.message}`, error.stack);
             res.status(500).json({ error: `Ошибка при очистке статистики: ${error.message}` });
         }
     } else {
@@ -100,12 +117,17 @@ function parsePrometheusMetrics(data) {
     for (const line of lines) {
         if (line.startsWith('#') || !line.trim()) continue;
         try {
-            if (line.startsWith('go_memstats_heap_objects')) {
-                metrics.heap_objects = parseFloat(line.split(' ')[1]);
-            } else if (line.startsWith('promhttp_metric_handler_requests_total{code="200"}')) {
-                metrics.requests_total = parseFloat(line.split(' ')[1]);
-            } else if (line.startsWith('process_start_time_seconds')) {
-                const startTimeSeconds = parseFloat(line.split(' ')[1]);
+            const [key, value] = line.split(' ');
+            if (!key || !value) {
+                console.warn(`Skipping invalid line: ${line}`);
+                continue;
+            }
+            if (key.startsWith('go_memstats_heap_objects')) {
+                metrics.heap_objects = parseFloat(value);
+            } else if (key.startsWith('promhttp_metric_handler_requests_total{code="200"}')) {
+                metrics.requests_total = parseFloat(value);
+            } else if (key.startsWith('process_start_time_seconds')) {
+                const startTimeSeconds = parseFloat(value);
                 const currentTimeSeconds = Date.now() / 1000;
                 metrics.uptime = Math.max(0, currentTimeSeconds - startTimeSeconds);
             }
@@ -114,5 +136,8 @@ function parsePrometheusMetrics(data) {
         }
     }
 
+    if (!metrics.heap_objects && !metrics.requests_total && !metrics.uptime) {
+        console.warn('No valid metrics parsed');
+    }
     return metrics;
 }
