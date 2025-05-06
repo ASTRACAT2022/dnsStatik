@@ -12,6 +12,7 @@
         body { font-family: 'Inter', sans-serif; }
         .fade-in { animation: fadeIn 0.5s ease-in; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        canvas#metricsChart { max-height: 300px; }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen">
@@ -54,7 +55,7 @@
         <!-- График -->
         <div class="bg-white text-gray-800 p-6 rounded-xl shadow-2xl mb-6 fade-in">
             <h2 class="text-2xl font-semibold mb-4">График метрик</h2>
-            <canvas id="metricsChart" width="400" height="200"></canvas>
+            <canvas id="metricsChart"></canvas>
         </div>
 
         <!-- Статус API -->
@@ -106,48 +107,63 @@
         };
 
         // Инициализация графика
-        const ctx = document.getElementById('metricsChart').getContext('2d');
-        const metricsChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: chartData.labels,
-                datasets: [
-                    {
-                        label: 'Объекты в куче',
-                        data: chartData.heapObjects,
-                        borderColor: '#4B9CFC',
-                        backgroundColor: 'rgba(75, 156, 252, 0.2)',
-                        fill: false,
-                        tension: 0.2
-                    },
-                    {
-                        label: 'Успешные запросы (код 200)',
-                        data: chartData.requestsTotal,
-                        borderColor: '#FC8181',
-                        backgroundColor: 'rgba(252, 129, 129, 0.2)',
-                        fill: false,
-                        tension: 0.2
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    x: {
-                        title: { display: true, text: 'Время', color: '#4B5563' },
-                        grid: { color: '#E5E7EB' }
-                    },
-                    y: {
-                        title: { display: true, text: 'Значение', color: '#4B5563' },
-                        beginAtZero: false,
-                        grid: { color: '#E5E7EB' }
-                    }
+        let metricsChart;
+        try {
+            const ctx = document.getElementById('metricsChart').getContext('2d');
+            metricsChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartData.labels,
+                    datasets: [
+                        {
+                            label: 'Объекты в куче',
+                            data: chartData.heapObjects,
+                            borderColor: '#4B9CFC',
+                            backgroundColor: 'rgba(75, 156, 252, 0.2)',
+                            fill: false,
+                            tension: 0.2,
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        },
+                        {
+                            label: 'Успешные запросы (код 200)',
+                            data: chartData.requestsTotal,
+                            borderColor: '#FC8181',
+                            backgroundColor: 'rgba(252, 129, 129, 0.2)',
+                            fill: false,
+                            tension: 0.2,
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        }
+                    ]
                 },
-                plugins: {
-                    legend: { labels: { color: '#4B5563' } }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: {
+                        duration: 1000,
+                        easing: 'easeInOutQuad'
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Время', color: '#4B5563' },
+                            grid: { color: '#E5E7EB' }
+                        },
+                        y: {
+                            title: { display: true, text: 'Значение', color: '#4B5563' },
+                            beginAtZero: false,
+                            grid: { color: '#E5E7EB' }
+                        }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#4B5563' } }
+                    }
                 }
-            }
-        });
+            });
+            console.log('Chart initialized successfully');
+        } catch (error) {
+            console.error('Error initializing chart:', error);
+        }
 
         async function fetchMetrics() {
             const startTime = performance.now();
@@ -175,8 +191,7 @@
                 apiStats.errorCount += 1;
                 apiStats.lastStatus = 'Ошибка';
                 
-                // Очищаем метрики при ошибке
-                displayMetrics({}); // Пустой объект для "Нет данных"
+                displayMetrics({});
                 updateApiStats();
                 
                 document.getElementById('loading').classList.add('hidden');
@@ -186,12 +201,10 @@
         }
 
         function displayMetrics(metrics) {
-            // Метрики
             document.getElementById('heap_objects').textContent = metrics.heap_objects ? Math.round(metrics.heap_objects).toLocaleString() : 'Нет данных';
             document.getElementById('requests_total').textContent = metrics.requests_total ? Math.round(metrics.requests_total).toLocaleString() : 'Нет данных';
             document.getElementById('uptime').textContent = metrics.uptime ? formatUptime(metrics.uptime) : 'Нет данных';
 
-            // Индикатор нагрузки
             const heapObjects = metrics.heap_objects || 0;
             const loadElement = document.getElementById('heap_objects_load');
             let loadText, loadClass;
@@ -222,6 +235,7 @@
         }
 
         function updateChart(metrics) {
+            console.log('Updating chart with metrics:', metrics);
             const now = new Date().toLocaleTimeString();
             chartData.labels.push(now);
             chartData.heapObjects.push(metrics.heap_objects || 0);
@@ -233,10 +247,15 @@
                 chartData.requestsTotal.shift();
             }
 
-            metricsChart.data.labels = chartData.labels;
-            metricsChart.data.datasets[0].data = chartData.heapObjects;
-            metricsChart.data.datasets[1].data = chartData.requestsTotal;
-            metricsChart.update();
+            if (metricsChart) {
+                metricsChart.data.labels = chartData.labels;
+                metricsChart.data.datasets[0].data = chartData.heapObjects;
+                metricsChart.data.datasets[1].data = chartData.requestsTotal;
+                metricsChart.update();
+                console.log('Chart updated successfully');
+            } else {
+                console.error('Chart instance not available');
+            }
         }
 
         function updateApiStats() {
@@ -247,7 +266,7 @@
         }
 
         fetchMetrics();
-        setInterval(fetchMetrics, 60000);
+        setInterval(fetchMetrics, 30000); // Обновление каждые 30 секунд
     </script>
 </body>
 </html>
