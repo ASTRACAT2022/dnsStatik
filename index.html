@@ -3,14 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Статистика DNS-сервера</title>
+    <title>astracatCloud DNS IPV4</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body class="bg-gray-100 font-sans">
     <div class="container mx-auto p-6">
-        <h1 class="text-3xl font-bold text-center mb-6">Статистика DNS-сервера</h1>
-        <div id="metrics" class="bg-white p-6 rounded-lg shadow-lg">
+        <h1 class="text-3xl font-bold text-center mb-6">astracatCloud DNS IPV4</h1>
+        <div id="metrics" class="bg-white p-6 rounded-lg shadow-lg mb-6">
             <h2 class="text-xl font-semibold mb-4">Основные показатели</h2>
             <div id="loading" class="text-center">Загрузка данных...</div>
             <div id="error" class="text-red-500 hidden">Ошибка загрузки данных. Пожалуйста, попробуйте позже.</div>
@@ -23,63 +24,72 @@
                 </thead>
                 <tbody>
                     <tr>
-                        <td class="border p-2">Записи в кэше (успешные)</td>
-                        <td class="border p-2" id="cache_success"></td>
+                        <td class="border p-2">Количество объектов в куче</td>
+                        <td class="border p-2" id="heap_objects"></td>
                     </tr>
                     <tr>
-                        <td class="border p-2">Записи в кэше (отклонённые)</td>
-                        <td class="border p-2" id="cache_denial"></td>
-                    </tr>
-                    <tr>
-                        <td class="border p-2">Попадания в кэш (успешные)</td>
-                        <td class="border p-2" id="cache_hits_success"></td>
-                    </tr>
-                    <tr>
-                        <td class="border p-2">Попадания в кэш (отклонённые)</td>
-                        <td class="border p-2" id="cache_hits_denial"></td>
-                    </tr>
-                    <tr>
-                        <td class="border p-2">Промахи кэша</td>
-                        <td class="border p-2" id="cache_misses"></td>
-                    </tr>
-                    <tr>
-                        <td class="border p-2">Всего DNS-запросов</td>
-                        <td class="border p-2" id="cache_requests"></td>
-                    </tr>
-                    <tr>
-                        <td class="border p-2">Запросы с DNSSEC (DO-бит)</td>
-                        <td class="border p-2" id="dns_do_requests"></td>
-                    </tr>
-                    <tr>
-                        <td class="border p-2">Среднее время ответа (сек)</td>
-                        <td class="border p-2" id="request_duration"></td>
-                    </tr>
-                    <tr>
-                        <td class="border p-2">Общий размер запросов (байты)</td>
-                        <td class="border p-2" id="request_size"></td>
-                    </tr>
-                    <tr>
-                        <td class="border p-2">Общий размер ответов (байты)</td>
-                        <td class="border p-2" id="response_size"></td>
-                    </tr>
-                    <tr>
-                        <td class="border p-2">Успешные ответы</td>
-                        <td class="border p-2" id="responses_noerror"></td>
-                    </tr>
-                    <tr>
-                        <td class="border p-2">Ошибки: домен не существует</td>
-                        <td class="border p-2" id="responses_nxdomain"></td>
-                    </tr>
-                    <tr>
-                        <td class="border p-2">Ошибки сервера</td>
-                        <td class="border p-2" id="responses_servfail"></td>
+                        <td class="border p-2">Успешные запросы (код 200)</td>
+                        <td class="border p-2" id="requests_total"></td>
                     </tr>
                 </tbody>
             </table>
         </div>
+        <div class="bg-white p-6 rounded-lg shadow-lg">
+            <h2 class="text-xl font-semibold mb-4">График метрик</h2>
+            <canvas id="metricsChart" width="400" height="200"></canvas>
+        </div>
     </div>
 
     <script>
+        // Хранилище для данных графика (последние 10 точек)
+        const chartData = {
+            labels: [],
+            heapObjects: [],
+            requestsTotal: []
+        };
+
+        // Инициализация графика
+        const ctx = document.getElementById('metricsChart').getContext('2d');
+        const metricsChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: chartData.labels,
+                datasets: [
+                    {
+                        label: 'Объекты в куче',
+                        data: chartData.heapObjects,
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        fill: false,
+                        tension: 0.1
+                    },
+                    {
+                        label: 'Успешные запросы (код 200)',
+                        data: chartData.requestsTotal,
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                        fill: false,
+                        tension: 0.1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Время' }
+                    },
+                    y: {
+                        title: { display: true, text: 'Значение' },
+                        beginAtZero: false
+                    }
+                },
+                plugins: {
+                    legend: { display: true }
+                }
+            }
+        });
+
         async function fetchMetrics() {
             try {
                 const response = await axios.get('/metrics');
@@ -88,6 +98,7 @@
                 }
                 const metrics = response.data;
                 displayMetrics(metrics);
+                updateChart(metrics);
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('metricsTable').classList.remove('hidden');
             } catch (error) {
@@ -99,19 +110,29 @@
         }
 
         function displayMetrics(metrics) {
-            document.getElementById('cache_success').textContent = metrics.cache_success ? Math.round(metrics.cache_success).toLocaleString() : '0';
-            document.getElementById('cache_denial').textContent = metrics.cache_denial ? Math.round(metrics.cache_denial).toLocaleString() : '0';
-            document.getElementById('cache_hits_success').textContent = metrics.cache_hits_success ? Math.round(metrics.cache_hits_success).toLocaleString() : '0';
-            document.getElementById('cache_hits_denial').textContent = metrics.cache_hits_denial ? Math.round(metrics.cache_hits_denial).toLocaleString() : '0';
-            document.getElementById('cache_misses').textContent = metrics.cache_misses ? Math.round(metrics.cache_misses).toLocaleString() : '0';
-            document.getElementById('cache_requests').textContent = metrics.cache_requests ? Math.round(metrics.cache_requests).toLocaleString() : '0';
-            document.getElementById('dns_do_requests').textContent = metrics.dns_do_requests ? Math.round(metrics.dns_do_requests).toLocaleString() : '0';
-            document.getElementById('request_duration').textContent = metrics.request_duration ? metrics.request_duration.toFixed(6) : '0';
-            document.getElementById('request_size').textContent = metrics.request_size ? Math.round(metrics.request_size).toLocaleString() : '0';
-            document.getElementById('response_size').textContent = metrics.response_size ? Math.round(metrics.response_size).toLocaleString() : '0';
-            document.getElementById('responses_noerror').textContent = metrics.responses_noerror ? Math.round(metrics.responses_noerror).toLocaleString() : '0';
-            document.getElementById('responses_nxdomain').textContent = metrics.responses_nxdomain ? Math.round(metrics.responses_nxdomain).toLocaleString() : '0';
-            document.getElementById('responses_servfail').textContent = metrics.responses_servfail ? Math.round(metrics.responses_servfail).toLocaleString() : '0';
+            document.getElementById('heap_objects').textContent = metrics.heap_objects ? Math.round(metrics.heap_objects).toLocaleString() : '0';
+            document.getElementById('requests_total').textContent = metrics.requests_total ? Math.round(metrics.requests_total).toLocaleString() : '0';
+        }
+
+        function updateChart(metrics) {
+            // Добавляем новое время (текущая метка времени)
+            const now = new Date().toLocaleTimeString();
+            chartData.labels.push(now);
+            chartData.heapObjects.push(metrics.heap_objects || 0);
+            chartData.requestsTotal.push(metrics.requests_total || 0);
+
+            // Ограничиваем до 10 точек
+            if (chartData.labels.length > 10) {
+                chartData.labels.shift();
+                chartData.heapObjects.shift();
+                chartData.requestsTotal.shift();
+            }
+
+            // Обновляем график
+            metricsChart.data.labels = chartData.labels;
+            metricsChart.data.datasets[0].data = chartData.heapObjects;
+            metricsChart.data.datasets[1].data = chartData.requestsTotal;
+            metricsChart.update();
         }
 
         fetchMetrics();
