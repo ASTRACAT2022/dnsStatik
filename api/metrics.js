@@ -8,17 +8,26 @@ let statsStore = {
         requestsTotal: []
     },
     apiStats: {
-        successCount: 0,
-        errorCount: 0,
-        lastResponseTime: 0,
-        lastStatus: 'Ожидание'
+        requests: []
     }
 };
 
-module.exports = async (req, res) => {
-    console.log(`Received ${req.method} request for /metrics`);
+// Фильтрация записей старше 24 часов
+function cleanOldRequests() {
+    const now = Date.now();
+    statsStore.apiStats.requests = statsStore.apiStats.requests.filter(req => {
+        const timestamp = new Date(req.timestamp).getTime();
+        return now - timestamp < 24 * 60 * 60 * 1000;
+    });
+    if (statsStore.apiStats.requests.length > 1000) {
+        statsStore.apiStats.requests = statsStore.apiStats.requests.slice(-1000);
+    }
+}
 
-    if (req.method === 'GET') {
+module.exports = async (req, res) => {
+    console.log(`Received ${req.method} request for ${req.path}`);
+
+    if (req.method === 'GET' && req.path === '/metrics') {
         try {
             console.log(`Fetching metrics from http://85.209.2.112:9000/metrics`);
             const startTime = Date.now();
@@ -28,11 +37,23 @@ module.exports = async (req, res) => {
             const metrics = parsePrometheusMetrics(response.data);
             metrics.response_time_ms = responseTimeMs;
 
+            // Очищаем старые записи
+            cleanOldRequests();
+
+            // Агрегируем apiStats
+            const apiStats = {
+                successCount: statsStore.apiStats.requests.filter(r => r.success).length,
+                errorCount: statsStore.apiStats.requests.filter(r => !r.success).length,
+                lastResponseTime: statsStore.apiStats.requests.length > 0 ? statsStore.apiStats.requests[statsStore.apiStats.requests.length - 1].responseTime : 0,
+                lastStatus: statsStore.apiStats.requests.length > 0 ? statsStore.apiStats.requests[statsStore.apiStats.requests.length - 1].status : 'Ожидание',
+                requests: statsStore.apiStats.requests
+            };
+
             console.log('Metrics parsed successfully');
             res.status(200).json({
                 metrics,
                 chartData: statsStore.chartData,
-                apiStats: statsStore.apiStats
+                apiStats
             });
         } catch (error) {
             console.error(`Failed to fetch or parse metrics: ${error.message}`);
@@ -44,8 +65,9 @@ module.exports = async (req, res) => {
             if (chartData) {
                 statsStore.chartData = chartData;
             }
-            if (apiStats) {
-                statsStore.apiStats = apiStats;
+            if (apiStats && apiStats.requests) {
+                statsStore.apiStats.requests = apiStats.requests;
+                cleanOldRequests();
             }
             console.log('Statistics updated in server store');
             res.status(200).json({ message: 'Statistics saved' });
@@ -57,7 +79,7 @@ module.exports = async (req, res) => {
         try {
             statsStore = {
                 chartData: { labels: [], heapObjects: [], requestsTotal: [] },
-                apiStats: { successCount: 0, errorCount: 0, lastResponseTime: 0, lastStatus: 'Ожидание' }
+                apiStats: { requests: [] }
             };
             console.log('Statistics cleared in server store');
             res.status(200).json({ message: 'Statistics cleared' });
