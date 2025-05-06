@@ -90,20 +90,25 @@
     </div>
 
     <script>
-        // Хранилище для данных графика
-        const chartData = {
+        // Загрузка данных из localStorage или инициализация
+        let chartData = JSON.parse(localStorage.getItem('chartData')) || {
             labels: [],
             heapObjects: [],
             requestsTotal: []
         };
 
-        // Хранилище для статистики API
-        const apiStats = {
+        let apiStats = JSON.parse(localStorage.getItem('apiStats')) || {
             successCount: 0,
             errorCount: 0,
             lastResponseTime: 0,
             lastStatus: 'Ожидание'
         };
+
+        // Функция для сохранения данных в localStorage
+        function saveToLocalStorage() {
+            localStorage.setItem('chartData', JSON.stringify(chartData));
+            localStorage.setItem('apiStats', JSON.stringify(apiStats));
+        }
 
         // Инициализация графика
         const ctx = document.getElementById('metricsChart').getContext('2d');
@@ -166,6 +171,7 @@
                 displayMetrics(metrics);
                 updateChart(metrics);
                 updateApiStats();
+                saveToLocalStorage(); // Сохраняем данные после обновления
                 
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('metricsTable').classList.remove('hidden');
@@ -175,9 +181,9 @@
                 apiStats.errorCount += 1;
                 apiStats.lastStatus = 'Ошибка';
                 
-                // Очищаем метрики при ошибке
-                displayMetrics({}); // Пустой объект для "Нет данных"
+                displayMetrics({});
                 updateApiStats();
+                saveToLocalStorage(); // Сохраняем данные после ошибки
                 
                 document.getElementById('loading').classList.add('hidden');
                 document.getElementById('error').classList.remove('hidden');
@@ -186,12 +192,10 @@
         }
 
         function displayMetrics(metrics) {
-            // Метрики
             document.getElementById('heap_objects').textContent = metrics.heap_objects ? Math.round(metrics.heap_objects).toLocaleString() : 'Нет данных';
             document.getElementById('requests_total').textContent = metrics.requests_total ? Math.round(metrics.requests_total).toLocaleString() : 'Нет данных';
             document.getElementById('uptime').textContent = metrics.uptime ? formatUptime(metrics.uptime) : 'Нет данных';
 
-            // Индикатор нагрузки
             const heapObjects = metrics.heap_objects || 0;
             const loadElement = document.getElementById('heap_objects_load');
             let loadText, loadClass;
@@ -246,8 +250,12 @@
             document.getElementById('api_status').textContent = apiStats.lastStatus;
         }
 
+        // Инициализация графика с сохраненными данными
+        updateChart({}); // Обновляем график с текущими данными
+        updateApiStats(); // Обновляем статистику API
         fetchMetrics();
         setInterval(fetchMetrics, 60000);
     </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'93b99dfcc9ff8bba',t:'MTc0NjU0NjQ1Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script>
 </body>
 </html>
