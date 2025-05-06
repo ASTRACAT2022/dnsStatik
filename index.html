@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Статистика DNS-сервера</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+<body class="bg-gray-100 font-sans">
+    <div class="container mx-auto p-6">
+        <h1 class="text-3xl font-bold text-center mb-6">Статистика DNS-сервера</h1>
+        <div id="metrics" class="bg-white p-6 rounded-lg shadow-lg">
+            <h2 class="text-xl font-semibold mb-4">Основные показатели</h2>
+            <div id="loading" class="text-center">Загрузка данных...</div>
+            <div id="error" class="text-red-500 hidden">Ошибка загрузки данных. Пожалуйста, попробуйте позже.</div>
+            <table class="w-full border-collapse hidden" id="metricsTable">
+                <thead>
+                    <tr class="bg-gray-200">
+                        <th class="border p-2">Параметр</th>
+                        <th class="border p-2">Значение</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="border p-2">Записи в кэше (успешные)</td>
+                        <td class="border p-2" id="cache_success"></td>
+                    </tr>
+                    <tr>
+                        <td class="border p-2">Записи в кэше (отклонённые)</td>
+                        <td class="border p-2" id="cache_denial"></td>
+                    </tr>
+                    <tr>
+                        <td class="border p-2">Попадания в кэш (успешные)</td>
+                        <td class="border p-2" id="cache_hits_success"></td>
+                    </tr>
+                    <tr>
+                        <td class="border p-2">Попадания в кэш (отклонённые)</td>
+                        <td class="border p-2" id="cache_hits_denial"></td>
+                    </tr>
+                    <tr>
+                        <td class="border p-2">Промахи кэша</td>
+                        <td class="border p-2" id="cache_misses"></td>
+                    </tr>
+                    <tr>
+                        <td class="border p-2">Всего DNS-запросов</td>
+                        <td class="border p-2" id="cache_requests"></td>
+                    </tr>
+                    <tr>
+                        <td class="border p-2">Запросы с DNSSEC (DO-бит)</td>
+                        <td class="border p-2" id="dns_do_requests"></td>
+                    </tr>
+                    <tr>
+                        <td class="border p-2">Среднее время ответа (сек)</td>
+                        <td class="border p-2" id="request_duration"></td>
+                    </tr>
+                    <tr>
+                        <td class="border p-2">Общий размер запросов (байты)</td>
+                        <td class="border p-2" id="request_size"></td>
+                    </tr>
+                    <tr>
+                        <td class="border p-2">Общий размер ответов (байты)</td>
+                        <td class="border p-2" id="request_size"></td>
+                    </tr>
+                    <tr>
+                        <td class="border p-2">Успешные ответы</td>
+                        <td class="border p-2" id="responses_noerror"></td>
+                    </tr>
+                    <tr>
+                        <td class="border p-2">Ошибки: домен не существует</td>
+                        <td class="border p-2" id="responses_nxdomain"></td>
+                    </tr>
+                    <tr>
+                        <td class="border p-2">Ошибки сервера</td>
+                        <td class="border p-2" id="responses_servfail"></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        async function fetchMetrics() {
+            try {
+                const response = await axios.get('/metrics');
+                if (response.data.error) {
+                    throw new Error(response.data.error);
+                }
+                const metrics = response.data;
+                displayMetrics(metrics);
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('metricsTable').classList.remove('hidden');
+            } catch (error) {
+                console.error('Error fetching metrics:', error);
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('error').classList.remove('hidden');
+                document.getElementById('error').textContent = `Ошибка: ${error.message}`;
+            }
+        }
+
+        function displayMetrics(metrics) {
+            document.getElementById('cache_success').textContent = metrics.cache_success ? Math.round(metrics.cache_success).toLocaleString() : '0';
+            document.getElementById('cache_denial').textContent = metrics.cache_denial ? Math.round(metrics.cache_denial).toLocaleString() : '0';
+            document.getElementById('cache_hits_success').textContent = metrics.cache_hits_success ? Math.round(metrics.cache_hits_success).toLocaleString() : '0';
+            document.getElementById('cache_hits_denial').textContent = metrics.cache_hits_denial ? Math.round(metrics.cache_hits_denial).toLocaleString() : '0';
+            document.getElementById('cache_misses').textContent = metrics.cache_misses ? Math.round(metrics.cache_misses).toLocaleString() : '0';
+            document.getElementById('cache_requests').textContent = metrics.cache_requests ? Math.round(metrics.cache_requests).toLocaleString() : '0';
+            document.getElementById('dns_do_requests').textContent = metrics.dns_do_requests ? Math.round(metrics.dns_do_requests).toLocaleString() : '0';
+            document.getElementById('request_duration').textContent = metrics.request_duration ? metrics.request_duration.toFixed(6) : '0';
+            document.getElementById('request_size').textContent = metrics.request_size ? Math.round(metrics.request_size).toLocaleString() : '0';
+            document.getElementById('response_size').textContent = metrics.response_size ? Math.round(metrics.response_size).toLocaleString() : '0';
+            document.getElementById('responses_noerror').textContent = metrics.responses_noerror ? Math.round(metrics.responses_noerror).toLocaleString() : '0';
+            document.getElementById('responses_nxdomain').textContent = metrics.responses_nxdomain ? Math.round(metrics.responses_nxdomain).toLocaleString() : '0';
+            document.getElementById('responses_servfail').textContent = metrics.responses_servfail ? Math.round(metrics.responses_servfail).toLocaleString() : '0';
+        }
+
+        fetchMetrics();
+        setInterval(fetchMetrics, 60000); // Обновление каждую минуту
+    </script>
+</body>
+</html>
